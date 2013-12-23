@@ -1,0 +1,149 @@
+--- origsrc/libusb-win32-src-1.2.6.0/Makefile	2011-07-07 16:22:58.000000000 -0500
++++ src/libusb-win32-src-1.2.6.0/Makefile	2013-12-23 17:14:04.305700400 -0600
+@@ -59,7 +59,7 @@ IMPLIB = implib
+ UNIX2DOS = unix2dos
+ 
+ TARGET = libusb
+-DLL_TARGET = $(TARGET)0
++DLL_TARGET = cygusb0
+ LIB_TARGET = $(TARGET)
+ DRIVER_TARGET = $(TARGET)0.sys
+ INSTALL_DIR = /usr
+@@ -106,14 +106,14 @@ STDC_LD_LIBS=-lkernel32 \
+ 	-lodbc32 \
+ 	-lodbccp32
+ 
+-LDFLAGS = -s -L. -lusb -lgdi32 -luser32 -lcfgmgr32 -lsetupapi -lcomctl32
+-TEST_WIN_LDFLAGS = -s -L. -lusb -lkernel32 -lgdi32 -luser32 -lnewdev -lsetupapi -lcomctl32 -lole32 -mwindows
+-WIN_LDFLAGS = -s -L. -lkernel32 -lgdi32 -luser32 -lnewdev -lsetupapi -lcomctl32 -lole32 -mwindows
+-DLL_LDFLAGS = -s -mdll \
++LDFLAGS = -L. -lusb -lgdi32 -luser32 -lcfgmgr32 -lsetupapi -lcomctl32
++TEST_WIN_LDFLAGS = -L. -lusb -lkernel32 -lgdi32 -luser32 -lnewdev -lsetupapi -lcomctl32 -lole32 -mwindows
++WIN_LDFLAGS = -L. -lkernel32 -lgdi32 -luser32 -lnewdev -lsetupapi -lcomctl32 -lole32 -mwindows
++DLL_LDFLAGS = -mdll \
+ 	-Wl,--kill-at \
+-	-Wl,--out-implib,$(LIB_TARGET).a \
++	-Wl,--out-implib,$(LIB_TARGET).dll.a \
+ 	-Wl,--enable-stdcall-fixup \
+-	-L. -lcfgmgr32 -lsetupapi -lgdi32
++	-L. -lncurses -lcfgmgr32 -lsetupapi -lgdi32
+ 
+ LIBWDI_DLL_LDFLAGS = -s -shared \
+ 	-Wl,--kill-at \
+@@ -129,11 +129,11 @@ DRIVER_LDFLAGS = -s -shared -Wl,--entry,
+ all: dll filter test testwin
+ 
+ .PHONY: dll
+-dll: DLL_CFLAGS = $(CFLAGS) -DLOG_APPNAME=\"$(DLL_TARGET)-dll\" -DTARGETTYPE=DYNLINK
++dll: DLL_CFLAGS = $(CFLAGS) -DLOG_APPNAME=\"$(TARGET)0-dll\" -DTARGETTYPE=DYNLINK
+ dll: $(DLL_TARGET).dll
+ 
+ $(DLL_TARGET).dll: usb.2.o error.2.o descriptors.2.o windows.2.o install.2.o registry.2.o resource.2.o 
+-	$(CC) $(DLL_CFLAGS) -o $@ -I./src  $^ $(DLL_TARGET).def $(DLL_LDFLAGS)
++	$(CC) $(DLL_CFLAGS) -o $@ -I./src  $^ $(TARGET)0.def $(DLL_LDFLAGS)
+ 
+ %.2.o: %.c libusb_driver.h driver_api.h error.h
+ 	$(CC) $(DLL_CFLAGS) -c $< -o $@ $(CPPFLAGS) $(INCLUDES) 
+@@ -143,7 +143,7 @@ $(DLL_TARGET).dll: usb.2.o error.2.o des
+ 
+ .PHONY: filter
+ filter: FILTER_CFLAGS = $(CFLAGS) -DLOG_APPNAME=\"install-filter\" -DTARGETTYPE=PROGRAMconsole -DLOG_STYLE_SHORT
+-filter: FILTER_LDFLAGS = -s -L. -lgdi32 -luser32 -lcfgmgr32 -lsetupapi
++filter: FILTER_LDFLAGS = -L. -lgdi32 -luser32 -lcfgmgr32 -lsetupapi
+ filter: install-filter.exe
+ 
+ 
+--- origsrc/libusb-win32-src-1.2.6.0/src/error.h	2011-04-30 06:19:18.000000000 -0500
++++ src/libusb-win32-src-1.2.6.0/src/error.h	2013-12-23 16:36:51.987019100 -0600
+@@ -22,6 +22,10 @@
+ 
+ #include <stdarg.h>
+ 
++#ifdef __CYGWIN__
++#define _snprintf snprintf
++#define _vsnprintf vsnprintf
++#endif
+ 
+ enum USB_LOG_LEVEL
+ {
+--- origsrc/libusb-win32-src-1.2.6.0/src/install.c	2013-12-23 16:28:48.848385200 -0600
++++ src/libusb-win32-src-1.2.6.0/src/install.c	2013-12-23 17:11:10.137738600 -0600
+@@ -28,7 +28,12 @@
+ #include <string.h>
+ #include <process.h>
+ #include <richedit.h>
++#ifdef __CYGWIN__
++#include <pthread.h>
++#include <curses.h>
++#else
+ #include <conio.h>
++#endif
+ #include <ctype.h>
+ 
+ #ifdef __GNUC__
+@@ -48,6 +53,12 @@
+ #include "driver_api.h"
+ #include "libusb-win32_version.h"
+ 
++#ifdef __CYGWIN__
++#define _getch getch
++#define _strdup strdup
++#define _wcsicmp wcscasecmp
++#define _wcsnicmp wcsncasecmp
++#endif
+ 
+ #define LIBUSB_DRIVER_PATH  "system32\\drivers\\libusb0.sys"
+ #define LIBUSB_OLD_SERVICE_NAME_NT "libusbd"
+@@ -2030,7 +2041,11 @@ void __cdecl usb_progress_thread(void* p
+ 
+ 	context->ret = usb_install_console(context->filter_context);
+ 	PostMessage(context->progress_hwnd, UM_PROGRESS_STOP, (WPARAM)context->ret, 0);
++#ifdef __CYGWIN__
++	pthread_exit(0);
++#else
+ 	_endthread();
++#endif
+ }
+ 
+ bool_t usb_progress_add_text(HWND hwnd, const char* message, COLORREF crNewColor, bool_t bold, bool_t italic)
+@@ -2217,7 +2232,12 @@ LRESULT CALLBACK usb_progress_wndproc(HW
+ 
+ 			SetWindowTextA(hDlg, DISPLAY_RUNNING);
+ 			g_install_progress_context.error_count = 0;
++#ifdef __CYGWIN__
++			pthread_t thr;
++			g_install_progress_context.thread_id = pthread_create(&thr, NULL, &usb_progress_thread, &g_install_progress_context);
++#else
+ 			g_install_progress_context.thread_id = _beginthread(usb_progress_thread, 0, &g_install_progress_context);
++#endif
+ 			if (g_install_progress_context.thread_id != -1L)
+ 			{
+ 				return (INT_PTR)TRUE;
+--- origsrc/libusb-win32-src-1.2.6.0/src/registry.c	2013-12-23 16:28:48.851385300 -0600
++++ src/libusb-win32-src-1.2.6.0/src/registry.c	2013-12-23 16:44:34.207456600 -0600
+@@ -38,6 +38,11 @@
+ #include "registry.h"
+ #include "error.h"
+ 
++#ifdef __CYGWIN__
++#define _stricmp strcasecmp
++#define _strlwr strlwr
++#endif
++
+ #define CLASS_KEY_PATH_NT "SYSTEM\\CurrentControlSet\\Control\\Class\\"
+ #define CLASS_KEY_PATH_9X "SYSTEM\\CurrentControlSet\\Services\\Class\\"
+ 
+--- origsrc/libusb-win32-src-1.2.6.0/src/usbi.h	2011-03-18 18:31:22.000000000 -0500
++++ src/libusb-win32-src-1.2.6.0/src/usbi.h	2013-12-23 16:34:48.129934900 -0600
+@@ -5,9 +5,11 @@
+ 
+ #include "error.h"
+ 
++#ifndef __CYGWIN__
+ typedef unsigned char uint8_t;
+ typedef unsigned short uint16_t;
+ typedef unsigned long uint32_t;
++#endif
+ 
+ extern int usb_debug;
+ 

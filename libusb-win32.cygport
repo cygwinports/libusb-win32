@@ -1,0 +1,50 @@
+NAME="libusb-win32"
+VERSION=1.2.6.0
+RELEASE=1
+CATEGORY="Libs"
+SUMMARY="USB library (deprecated 0.1 API)"
+DESCRIPTION="libusb-win32 is a port of the USB library libusb 0.1 to the
+Microsoft Windows operating systems. The library allows user space applications
+to access many USB device on Windows in a generic way without writing a line
+of kernel driver code."
+HOMEPAGE="http://libusb-win32.sourceforge.net/"
+SRC_URI="mirror://sourceforge/libusb-win32/libusb-win32-src-${VERSION}.zip"
+# for compatibility with libusb-compat
+SRC_URI+=" libusb-config libusb.pc"
+SRC_DIR="libusb-win32-src-${VERSION}"
+PATCH_URI="
+	1.2.6-mingw64.patch
+	1.2.6-cygwin.patch
+"
+
+PKG_NAMES="${NAME} libusb0 libusb-devel"
+libusb_win32_CATEGORY="_obsolete"
+libusb_win32_REQUIRES="libusb0"
+libusb0_CONTENTS="usr/bin/cygusb0.dll usr/bin/testlibusb* usr/share/doc/"
+libusb0_MESSAGE="In order to use libusb0, you must download and run the
+LibUSB-Win32 driver installer from:
+https://sourceforge.net/projects/libusb-win32/files/libusb-win32-releases/${VERSION}/libusb-win32-devel-filter-${VERSION}.exe"
+libusb_devel_CONTENTS="usr/bin/libusb-config usr/include/ usr/lib/"
+
+src_compile() {
+	lndirs
+	cd ${B}
+	# we build only the userspace code; upstream supports building the
+	# driver only with the WDK, so users need to get the installer
+	cygmake -j1 cflags="${CFLAGS}" dll test testwin
+}
+
+src_install() {
+	cd ${B}
+	dobin cygusb0.dll testlibusb*.exe
+	dolib libusb.dll.a
+
+	dodir /usr/include
+	sed -e '/windows\.h/d' src/lusb0_usb.h | dos2unix > ${D}/usr/include/usb.h
+
+	sed -e "s|\@PREFIX\@|/usr|" ${S}/libusb-config > ${D}/usr/bin/libusb-config
+	chmod +x ${D}/usr/bin/libusb-config
+
+	dodir /usr/lib/pkgconfig
+	sed -e "s|\@PREFIX\@|/usr|" ${S}/libusb.pc > ${D}/usr/lib/pkgconfig/libusb.pc
+}
