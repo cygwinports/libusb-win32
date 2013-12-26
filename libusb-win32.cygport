@@ -40,7 +40,10 @@ src_install() {
 	dolib libusb.dll.a
 
 	dodir /usr/include
-	sed -e '/windows\.h/d' src/lusb0_usb.h | dos2unix > ${D}/usr/include/usb.h
+	sed -e '/windows\.h/d' -e "s/CALLBACK/${ARCH_i686+__stdcall}/g" \
+		-e 's/\(HWND\|HINSTANCE\)/void */g' -e 's/LPSTR/char */g' \
+		-e 's/LPCSTR/const char */g' -e 's/LPCWSTR/const wchar_t */g' \
+		src/lusb0_usb.h | dos2unix > ${D}/usr/include/usb.h
 
 	sed -e "s|\@PREFIX\@|/usr|" ${S}/libusb-config > ${D}/usr/bin/libusb-config
 	chmod +x ${D}/usr/bin/libusb-config
