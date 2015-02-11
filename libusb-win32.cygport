@@ -1,6 +1,6 @@
 NAME="libusb-win32"
 VERSION=1.2.6.0
-RELEASE=1
+RELEASE=2
 CATEGORY="Libs"
 SUMMARY="USB library (deprecated 0.1 API)"
 DESCRIPTION="libusb-win32 is a port of the USB library libusb 0.1 to the
